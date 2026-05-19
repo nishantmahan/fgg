@@ -1,0 +1,105 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // --- Entity Validations ---
+
+    function isValidGroup(data) {
+      return data.keys().hasAll(['name', 'userId', 'dailyReset', 'createdAt', 'updatedAt']) 
+          && data.keys().size() == 5
+          && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+          && data.userId == request.auth.uid
+          && data.dailyReset is bool
+          && data.createdAt == request.time
+          && data.updatedAt == request.time;
+    }
+
+    function isValidTask(data) {
+      return data.keys().hasAll(['url', 'title', 'favicon', 'notes', 'completed', 'resetDaily', 'order', 'userId', 'groupId', 'createdAt', 'updatedAt'])
+          && (data.keys().size() == 11 || (data.keys().size() == 12 && data.keys().hasAny(['completedAt', 'dueDate'])))
+          && data.url is string && data.url.size() <= 2048
+          && data.title is string && data.title.size() <= 200
+          && data.favicon is string && data.favicon.size() <= 2048
+          && data.notes is string && data.notes.size() <= 1000
+          && data.completed is bool
+          && data.resetDaily is bool
+          && data.order is number
+          && data.userId == request.auth.uid
+          && data.groupId is string && isValidId(data.groupId)
+          && data.createdAt == request.time
+          && data.updatedAt == request.time;
+    }
+
+    // --- Collections ---
+
+    match /groups/{groupId} {
+      allow get: if isOwner(existing().userId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      
+      allow create: if isSignedIn() && isValidId(groupId) && isValidGroup(incoming());
+      
+      allow update: if isOwner(existing().userId) && (
+        // Action: Edit
+        (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'dailyReset', 'updatedAt'])
+         && incoming().name is string && incoming().name.size() <= 100
+         && incoming().dailyReset is bool
+         && incoming().updatedAt == request.time)
+      );
+      
+      allow delete: if isOwner(existing().userId);
+    }
+
+    match /tasks/{taskId} {
+      allow get: if isOwner(existing().userId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      allow create: if isSignedIn() && isValidId(taskId) && isValidTask(incoming())
+                    && exists(/databases/$(database)/documents/groups/$(incoming().groupId))
+                    && get(/databases/$(database)/documents/groups/$(incoming().groupId)).data.userId == request.auth.uid;
+      
+      allow update: if isOwner(existing().userId) && (
+        // Action: Toggle Complete
+        (incoming().diff(existing()).affectedKeys().hasOnly(['completed', 'completedAt', 'updatedAt'])
+         && incoming().completed is bool
+         && incoming().updatedAt == request.time)
+        ||
+        // Action: Reorder
+        (incoming().diff(existing()).affectedKeys().hasOnly(['order', 'updatedAt'])
+         && incoming().order is number
+         && incoming().updatedAt == request.time)
+        ||
+        // Action: Full Edit
+        (incoming().diff(existing()).affectedKeys().hasOnly(['url', 'title', 'favicon', 'notes', 'dueDate', 'resetDaily', 'updatedAt'])
+         && incoming().url is string
+         && incoming().updatedAt == request.time)
+      );
+
+      allow delete: if isOwner(existing().userId);
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "entities": {
+    "Group": {
+      "title": "Group",
+      "description": "A collection of tasks",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "userId": { "type": "string" },
+        "dailyReset": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "userId"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A link to a task",
+      "type": "object",
+      "properties": {
+        "url": { "type": "string" },
+        "title": { "type": "string" },
+        "favicon": { "type": "string" },
+        "notes": { "type": "string" },
+        "completed": { "type": "boolean" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "dueDate": { "type": "string", "format": "date-time" },
+        "resetDaily": { "type": "boolean" },
+        "order": { "type": "number" },
+        "userId": { "type": "string" },
+        "groupId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["url", "userId", "groupId"]
+    }
+  },
+  "firestore": {
+    "/groups/{groupId}": {
+      "schema": "Group",
+      "description": "User task groups"
+    },
+    "/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "User task links"
+    }
+  }
+}
